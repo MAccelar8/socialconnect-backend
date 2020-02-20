@@ -1,0 +1,27 @@
+{
+  "name": "social-connect-backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "scripts": {
+    "start": "pm2 start app.js"
+  },
+  "author": "Milan Lakhani",
+  "license": "ISC",
+  "devDependencies": {
+    "nodemon": "^2.0.2"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "body-parser": "^1.19.0",
+    "cors": "^2.8.5",
+    "express": "^4.17.1",
+    "express-session": "^1.17.0",
+    "firebase-admin": "^8.9.1",
+    "install": "^0.13.0",
+    "passport": "^0.4.1",
+    "passport-local": "^1.0.0",
+    "pm2": "^4.2.3",
+    "socket.io": "^2.3.0"
+  }
+}
