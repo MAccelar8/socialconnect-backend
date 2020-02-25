@@ -4,7 +4,7 @@
   "description": "",
   "main": "app.js",
   "scripts": {
-    "start": "pm2 start app.js"
+    "start": "nodemon app.js"
   },
   "author": "Milan Lakhani",
   "license": "ISC",

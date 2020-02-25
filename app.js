@@ -33,6 +33,28 @@ const port = process.env.PORT || 3000;
 
 var currentLoggedInUsers = {};
 
+// db.collectionGroup('messages').where('recieverId' , '==' , '1xbZWFiZeAcRb0kvbJneJZpoq5F3').
+
+const example = async (snapshot, counter) => {
+  for (const snap of snapshot) {
+    // console.log(snap.ref);
+    await snap.ref.update({ status: 1 });
+    counter++;
+    // x = await returnNum(x);
+    // console.log("after each timeout " , x);
+  }
+
+  return counter;
+};
+// const returnNum = x => {
+//   x++;
+//   return new Promise((resolve, reject) => {
+//     setTimeout(() => {
+//       resolve(x);
+//     }, 1000);
+//   });
+// }
+
 io.on("connection", socket => {
   console.log("user connected");
   console.log(socket.id);
@@ -40,14 +62,35 @@ io.on("connection", socket => {
   const uid = socket.handshake.query.uid;
   currentLoggedInUsers[uid] = socket.id;
 
-  getAllfriends(uid).then(array=>{
-    if (array.length > 0) {
-      array.forEach(data => {
-        console.log("notify online send to ", currentLoggedInUsers[data]);
-        io.to(currentLoggedInUsers[data]).emit("status-change", { uid : uid , status : 1 });
+  db.collectionGroup("messages")
+    .where("recieverId", "==", uid)
+    .where("status", "==", 0)
+    .get()
+    .then(snapshot => {
+      // let promise;
+
+      console.log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+      console.log(snapshot.docs.values());
+      counter = 0;
+      example(snapshot.docs.values(), counter).then(cnt => {
+        console.log("after updation the value of counter is : ", cnt);
+        getAllfriends(uid).then(array => {
+          if (array.length > 0) {
+            array.forEach(data => {
+              console.log("notify online send to ", currentLoggedInUsers[data]);
+              io.to(currentLoggedInUsers[data]).emit("status-change", {
+                uid: uid,
+                status: 1
+              });
+            });
+          }
+        });
       });
-    }
-  })
+    })
+    .catch(e => {
+      console.log(e);
+    });
+
   // currentLoggedInUsers.push({
   //   [uid] : socket.id
   // })
@@ -62,7 +105,7 @@ io.on("connection", socket => {
       .doc(message.time.toString())
       .set(message)
       .then(data => {
-        console.log(message.room)
+        console.log(message.room);
         //  socket.emit("message-recieve" , message);
         // io.in(message.room).emit("message-recieve", message);
         io.to(message.room).emit("message-recieve", message);
@@ -185,7 +228,6 @@ io.on("connection", socket => {
           });
       });
   });
-  
 
   socket.on("accept-friend-request", message => {
     console.log("----------------accept-friend-request ");
@@ -261,13 +303,15 @@ io.on("connection", socket => {
   socket.on("create", function(room) {
     console.log("CREATE REQUEST +++++++++");
     socket.join(room);
-    console.log(socket.id ," is the New User in Room " , room);
+    console.log(socket.id, " is the New User in Room ", room);
   });
 
-  socket.on("typing" , message=>{
+  socket.on("typing", message => {
     // console.log("recieved at server and sending to ...")
-    socket.to(currentLoggedInUsers[message.senderId]).emit('recieve-typing' , {status : 1 , message : message})
-  })
+    socket
+      .to(currentLoggedInUsers[message.senderId])
+      .emit("recieve-typing", { status: 1, message: message });
+  });
 
   socket.on("disconnect", function() {
     console.log(uid + " Got disconnect!");
@@ -276,11 +320,17 @@ io.on("connection", socket => {
       console.log("DATA IS : ");
       console.log(array);
       console.log("AFTER GET_ALL_FRIENDS");
-      io.to(currentLoggedInUsers[array[0]]).emit("status-change", { uid:uid , status : 0 });
+      io.to(currentLoggedInUsers[array[0]]).emit("status-change", {
+        uid: uid,
+        status: 0
+      });
       if (array.length > 0) {
         array.forEach(data => {
           console.log("notify offline send to ", currentLoggedInUsers[data]);
-          io.to(currentLoggedInUsers[data]).emit("status-change", { uid:uid , status : 0 });
+          io.to(currentLoggedInUsers[data]).emit("status-change", {
+            uid: uid,
+            status: 0
+          });
         });
       }
 
@@ -288,7 +338,6 @@ io.on("connection", socket => {
       console.log("status of array after disconnection");
       console.log(currentLoggedInUsers);
     });
-
   });
 
   function testfunction() {
@@ -303,7 +352,7 @@ function getAllfriends(uid) {
       .collection("friends")
       .get()
       .then(snapshot => {
-        var array=[];
+        var array = [];
         if (snapshot.docs.length) {
           snapshot.forEach(doc => {
             array.push(doc.data().uid);
@@ -322,17 +371,25 @@ function getAllfriends(uid) {
 }
 
 app.get("/api/test", (req, res) => {
-  db.collection("friends")
-    .doc(req.body.uid)
-    .get()
-    .then(doc => {
-      console.log(doc.data().requests);
+  console.log(req.headers["token"]);
 
-      res.send({
-        status: 1,
-        message: "sucess"
-      });
-    });
+  console.log("Request found!!!!!!!!!!!!!!!!!!");
+
+  res.send({
+    message: "Sucessfull Request"
+  });
+
+  // db.collection("friends")
+  //   .doc(req.body.uid)
+  //   .get()
+  //   .then(doc => {
+  //     console.log(doc.data().requests);
+
+  //     res.send({
+  //       status: 1,
+  //       message: "sucess"
+  //     });
+  //   });
 });
 
 app.get("/", function(req, res) {
