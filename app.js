@@ -69,11 +69,11 @@ io.on("connection", socket => {
     .then(snapshot => {
       // let promise;
 
-      console.log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-      console.log(snapshot.docs.values());
+      // console.log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+      // console.log(snapshot.docs.values());
       counter = 0;
       example(snapshot.docs.values(), counter).then(cnt => {
-        console.log("after updation the value of counter is : ", cnt);
+        // console.log("after updation the value of counter is : ", cnt);
         getAllfriends(uid).then(array => {
           if (array.length > 0) {
             array.forEach(data => {
@@ -422,6 +422,47 @@ app.post("/api", (req, res) => {
     });
 });
 
+const getMessageCount = async (snapshot , uid) => {
+  var friendsuids = [];
+  var friends = [];
+  for (const snap of snapshot) {
+    // console.log(snap.ref);
+    friendsuids.push(snap.data().uid);
+    var friend = snap.data();
+    // friends.push(snap.data());
+    let roomId = snap.data().personalRoomID;
+    let snapsht = await db
+      .collection("chats")
+      .doc(roomId)
+      .collection("messages")
+      .where("status", "<=", 1)
+      // .where("recieverId" , '==' , uid)
+      .get();
+
+    var length = 0;
+    snapsht.forEach(d=>{
+      if(d.data().recieverId == uid){
+        length++ ;
+      }
+    })
+    let frienddatasnap = await snap.data().uRef.get();
+    console.log("---------------------");
+    frienddata = frienddatasnap.data();
+    // length = snapsht.docs.length;
+    Object.assign(frienddata, {
+      unreadMessagesCount: length,
+      personalRoomID: friend.personalRoomID,
+      timestamp: friend.timestamp
+    });
+    friends.push(frienddata);
+    counter++;
+    // x = await returnNum(x);
+    // console.log("after each timeout " , x);
+  }
+
+  return friends;
+};
+
 app.get("/api/getAllfriends", (req, res) => {
   admin
     .auth()
@@ -435,65 +476,53 @@ app.get("/api/getAllfriends", (req, res) => {
         .get()
         .then(snapshot => {
           if (snapshot.docs.length) {
-            var friendsuids = [];
-            var friends = [];
-            snapshot.forEach(data => {
-              friendsuids.push(data.data().uid);
-              friends.push(data.data());
-            });
-          } else {
-            var friendsuids = [];
-          }
-          // console.log("FRIENDS LENGTH", friendsuids.length);
-          if (friendsuids.length) {
-            db.collection("users")
-              .where("uid", "in", friendsuids)
-              .get()
-              .then(snapshot => {
-                var users = [];
-                snapshot.forEach(doc => {
-                  users.push(doc.data());
-                  // console.log(doc.id, "=>", doc.data());
-                });
-                res.send({
-                  status: 1,
-                  message: users,
-                  roomData: friends
-                });
-              });
+            // var friendsuids = [];
+            // var friends = [];
+            console.log("111111111111111111111111111111111111");
+            getMessageCount(snapshot.docs.values() , uid).then(data => {
+              console.log("22222222222222222222222222222222222222");
+              console.log(data);
 
-            // let promise = new Promise(function(resolve, reject) {
-            //   friendsuids.forEach(friend => {
-            //     friend.uRef.get().then(data => {
-            //       // console.log(data.data());
-            //       var user = data.data();
-            //       console.log("FRIEND DETAIL")
-            //       console.log(friend);
-            //       Object.assign(user, {
-            //         personalRoomID: friend.personalRoomID,
-            //         timestamp: friend.timestamp
-            //       });
-            //       console.log("AFTER ADDING FRIEND DETAIL")
-            //       console.log(user);
-            //       users.push(user);
-            //     });
-            //   });
-            //   console.log("before resolving");
-            //   console.log(users);
-            //   resolve("done");
-            // });
-            // promise.then(data => {
-            //   res.send({
-            //     status: 1,
-            //     message: users
-            //   });
+              res.send({
+                status : 1,
+                message : data
+              })
+            });
+            console.log("33333333333333333333333333333333");
+            // snapshot.forEach(data => {
+            //   friendsuids.push(data.data().uid);
+            //   friends.push(data.data());
             // });
           } else {
+            var friendsuids = [];
             res.send({
               status: 0,
               message: "No Friends Found"
             });
           }
+          // console.log("FRIENDS LENGTH", friendsuids.length);
+          // if (friendsuids.length) {
+          //   db.collection("users")
+          //     .where("uid", "in", friendsuids)
+          //     .get()
+          //     .then(snapshot => {
+          //       var users = [];
+          //       snapshot.forEach(doc => {
+          //         users.push(doc.data());
+          //         // console.log(doc.id, "=>", doc.data());
+          //       });
+          //       res.send({
+          //         status: 1,
+          //         message: users,
+          //         roomData: friends
+          //       });
+          //     });
+          // } else {
+          //   res.send({
+          //     status: 0,
+          //     message: "No Friends Found"
+          //   });
+          // }
         });
     })
     .catch(function(error) {
