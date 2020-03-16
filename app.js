@@ -56,10 +56,16 @@ const example = async (snapshot, counter) => {
 // }
 
 io.on("connection", socket => {
+  console.log(socket.handshake.headers.uid)
+
   console.log("user connected");
   console.log(socket.id);
   console.log("UserID for this socket is:" + socket.handshake.query.uid);
-  const uid = socket.handshake.query.uid;
+  var uid = socket.handshake.query.uid;
+
+  if(uid == null){
+    uid = socket.handshake.headers.uid;
+  }
   currentLoggedInUsers[uid] = socket.id;
 
   db.collectionGroup("messages")
@@ -106,9 +112,80 @@ io.on("connection", socket => {
       .set(message)
       .then(data => {
         console.log(message.room);
+
+        db.collection("chats")
+          .doc(message.room)
+          .set(message);
         //  socket.emit("message-recieve" , message);
         // io.in(message.room).emit("message-recieve", message);
         io.to(message.room).emit("message-recieve", message);
+      });
+  });
+
+  socket.on("send-video-call-request" , message=>{
+    console.log(message);
+    console.log("now sending request for video call to user," , message.touid);
+    io.to(currentLoggedInUsers[message.touid]).emit("recieve-video-call-request" , {offer:message.offer , fromid: uid});
+  });
+
+  socket.on("send-video-call-answer" , message=>{
+    console.log(message);
+    console.log("now sending Answer to for video call to user," , message.touid);
+    io.to(currentLoggedInUsers[message.touid]).emit("recieve-video-call-answer" , {answer:message.offer , fromid: uid});
+  })
+
+  socket.on("message-read", message => {
+    console.log("MESSAGE-------READ-----");
+    console.log(message);
+    db.collection("chats")
+      .doc(message.room)
+      .collection("messages")
+      .doc(message.time.toString())
+      .update({ status: 2 })
+      .then(data => {
+        io.to(currentLoggedInUsers[message.senderId]).emit(
+          "message-read-ack",
+          message
+        );
+      });
+  });
+
+  const changeReadStatus = async (snapshot, senderId) => {
+    var counter = 0;
+    for (const snap of snapshot) {
+      if (snap.data().senderId == senderId) {
+        await snap.ref.update({ status: 2 });
+      }
+      counter++;
+    }
+
+    return counter;
+  };
+  socket.on("message-read-all", message => {
+    console.log("MESSAGE-------READ-----ALL-----------");
+    console.log(message);
+
+    db.collection("chats")
+      .doc(message.roomId)
+      .collection("messages")
+      .where("status", "<=", 1)
+      .get()
+      .then(snapshot => {
+        if (snapshot.docs.length) {
+          changeReadStatus(snapshot.docs.values(), message.id).then(data => {
+            console.log(
+              "counter after updating message-all-read status......",
+              data
+            );
+            io.to(currentLoggedInUsers[message.id]).emit(
+              "message-read-all-ack",
+              {
+                ackBy: uid,
+                room: message.roomId
+              }
+            );
+          });
+        }
       });
   });
 
@@ -340,6 +417,10 @@ io.on("connection", socket => {
     });
   });
 
+  socket.on("test", message=>{
+    console.log("THIS A TEEEEEEEEEEEEEEST event by uid ",uid," and the data is :------ " ,message)
+  })
+
   function testfunction() {
     console.log("Current UID is : ", uid);
   }
@@ -422,7 +503,7 @@ app.post("/api", (req, res) => {
     });
 });
 
-const getMessageCount = async (snapshot , uid) => {
+const getMessageCount = async (snapshot, uid) => {
   var friendsuids = [];
   var friends = [];
   for (const snap of snapshot) {
@@ -440,22 +521,42 @@ const getMessageCount = async (snapshot , uid) => {
       .get();
 
     var length = 0;
-    snapsht.forEach(d=>{
-      if(d.data().recieverId == uid){
-        length++ ;
+    snapsht.forEach(d => {
+      if (d.data().recieverId == uid) {
+        length++;
       }
-    })
+    });
     let frienddatasnap = await snap.data().uRef.get();
     console.log("---------------------");
     frienddata = frienddatasnap.data();
     // length = snapsht.docs.length;
-    Object.assign(frienddata, {
-      unreadMessagesCount: length,
-      personalRoomID: friend.personalRoomID,
-      timestamp: friend.timestamp
-    });
+    var latestmessage = await db
+      .collection("chats")
+      .doc(roomId)
+      .get();
+
+    if (latestmessage.data() == null) {
+      Object.assign(frienddata, {
+        unreadMessagesCount: length,
+        personalRoomID: friend.personalRoomID,
+        timestamp: friend.timestamp,
+        latestmessage: " ",
+        latestmessagetime: " ",
+        latestmessagesenderId: " "
+      });
+    } else {
+      Object.assign(frienddata, {
+        unreadMessagesCount: length,
+        personalRoomID: friend.personalRoomID,
+        timestamp: friend.timestamp,
+        latestmessage: latestmessage.data().message,
+        latestmessagetime: latestmessage.data().time,
+        latestmessagesenderId: latestmessage.data().senderId
+      });
+    }
+
     friends.push(frienddata);
-    counter++;
+    // counter++;
     // x = await returnNum(x);
     // console.log("after each timeout " , x);
   }
@@ -464,6 +565,9 @@ const getMessageCount = async (snapshot , uid) => {
 };
 
 app.get("/api/getAllfriends", (req, res) => {
+
+  console.log("jshljashdjahsdjasdjashdjahdjashdjasdasd");
+  // console.log(req)s
   admin
     .auth()
     .verifyIdToken(req.headers["token"])
@@ -479,14 +583,14 @@ app.get("/api/getAllfriends", (req, res) => {
             // var friendsuids = [];
             // var friends = [];
             console.log("111111111111111111111111111111111111");
-            getMessageCount(snapshot.docs.values() , uid).then(data => {
+            getMessageCount(snapshot.docs.values(), uid).then(data => {
               console.log("22222222222222222222222222222222222222");
               console.log(data);
 
               res.send({
-                status : 1,
-                message : data
-              })
+                status: 1,
+                message: data
+              });
             });
             console.log("33333333333333333333333333333333");
             // snapshot.forEach(data => {
@@ -500,29 +604,6 @@ app.get("/api/getAllfriends", (req, res) => {
               message: "No Friends Found"
             });
           }
-          // console.log("FRIENDS LENGTH", friendsuids.length);
-          // if (friendsuids.length) {
-          //   db.collection("users")
-          //     .where("uid", "in", friendsuids)
-          //     .get()
-          //     .then(snapshot => {
-          //       var users = [];
-          //       snapshot.forEach(doc => {
-          //         users.push(doc.data());
-          //         // console.log(doc.id, "=>", doc.data());
-          //       });
-          //       res.send({
-          //         status: 1,
-          //         message: users,
-          //         roomData: friends
-          //       });
-          //     });
-          // } else {
-          //   res.send({
-          //     status: 0,
-          //     message: "No Friends Found"
-          //   });
-          // }
         });
     })
     .catch(function(error) {
